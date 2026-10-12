@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# Solo actuar cuando la interfaz wan6 sube
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "wan6" ] || exit 0
+
+WAN_DEV=$(uci -q get network.wan6.device || uci -q get network.wan.device)
+[ -z "$WAN_DEV" ] && exit 0
+
+# --- BUCLE DE ESPERA ---
+MAX_RETRIES=20
+COUNT=0
+NEW_GW=""
+
+while [ $COUNT -lt $MAX_RETRIES ]; do
+    # Buscamos el gateway con flag 'router'
+    NEW_GW=$(ip -6 neigh show dev "$WAN_DEV" | grep -i router | awk '{print $1}' | head -n1)
+    
+    if [ -n "$NEW_GW" ]; then
+        break
+    fi
+    
+    # Si no lo encuentra, esperamos 3 segundos y sumamos un intento
+    sleep 3
+    COUNT=$((COUNT+1))
+done
+# -----------------------
+
+# Si después de los reintentos sigue vacío, abortamos
+[ -z "$NEW_GW" ] && exit 0
+
+# Lógica de creación/actualización de ruta (igual que antes)
+SECTION=$(uci -q show network | grep "target='::/0'" | cut -d. -f2)
+
+if [ -z "$SECTION" ]; then
+    SECTION=$(uci add network route6)
+    uci set network."$SECTION".interface='wan6'
+    uci set network."$SECTION".target='::/0'
+    uci set network."$SECTION".gateway="$NEW_GW"
+    uci commit network
+    ip -6 route add default via "$NEW_GW" dev "$WAN_DEV" 2>/dev/null
+    logger -t starlink-ipv6 "Nueva ruta creada via $NEW_GW"
+else
+    CURRENT_GW=$(uci -q get network."$SECTION".gateway)
+    if [ "$CURRENT_GW" != "$NEW_GW" ]; then
+        uci set network."$SECTION".gateway="$NEW_GW"
+        uci commit network
+        ip -6 route replace default via "$NEW_GW" dev "$WAN_DEV"
+        logger -t starlink-ipv6 "Gateway actualizado a $NEW_GW"
+    fi
+fi

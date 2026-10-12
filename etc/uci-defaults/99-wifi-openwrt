@@ -1,0 +1,17 @@
+#!/bin/sh
+
+uci set wireless.default_radio0.ssid='Williams'
+uci set wireless.default_radio0.encryption='sae-mixed'
+uci set wireless.default_radio0.key='Margaret575'
+uci set wireless.radio0.disabled='0'
+
+uci set wireless.default_radio1.ssid='Williams 5G'
+uci set wireless.default_radio1.encryption='sae-mixed'
+uci set wireless.default_radio1.key='Margaret575'
+uci set wireless.radio1.disabled='0'
+
+uci commit wireless
+
+/etc/init.d/network restart
+
+exit 0

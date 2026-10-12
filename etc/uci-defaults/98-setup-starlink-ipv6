@@ -1,0 +1,44 @@
+#!/bin/sh
+
+echo "Configurando interfaces de red (wan6)..."
+
+uci set network.wan6.proto='dhcpv6'
+uci set network.wan6.reqprefix='no'
+uci set network.wan6.delegate='0'
+uci set dhcp.lan.defaultroute='1'
+uci commit network
+
+echo "Configurando DNSMASQ y DHCP (IPv6 RA)..."
+uci set dhcp.@dnsmasq[0].nonwildcard='0'
+uci set dhcp.@dnsmasq[0].localservice='0'
+uci set dhcp.@dnsmasq[0].maindhcp='1'
+
+uci set dhcp.lan.ra='server'
+uci set dhcp.lan.ra_slaac='1'
+uci set dhcp.lan.ra_lifetime='3600'
+uci set dhcp.lan.ra_mininterval='20'
+uci set dhcp.lan.ra_maxinterval='60'
+uci set dhcp.lan.ra_default='2'
+uci set dhcp.odhcpd.maindhcp='0'
+
+uci del_list dhcp.lan.ra_flags='managed-config' 2>/dev/null
+uci del_list dhcp.lan.ra_flags='other-config' 2>/dev/null
+uci add_list dhcp.lan.ra_flags='managed-config'
+uci add_list dhcp.lan.ra_flags='other-config'
+uci commit dhcp
+
+echo "Configurando Firewall (NAT & MTU)..."
+uci set firewall.@zone[1].masq='1'
+uci set firewall.@zone[1].mtu_fix='1'
+uci set firewall.@zone[1].masq6='1'
+uci commit firewall
+
+echo "Reiniciando servicios para aplicar cambios..."
+/etc/init.d/odhcpd restart
+/etc/init.d/dnsmasq restart
+/etc/init.d/firewall restart
+/etc/init.d/network restart
+
+echo "Configuración completada con éxito."
+
+exit 0
